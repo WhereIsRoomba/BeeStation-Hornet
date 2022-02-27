@@ -1,25 +1,23 @@
-"""
-This module allows user to convert MIDI melodies to SS13 sheet music ready
-for copy-and-paste
-"""
+# I am not experienced with coding, credit to Alainx277#0816 for editing this file to create .txt files in bulk rather than simple copy-paste one at a time.
 from functools import reduce
+import os
 import midi as mi
 import easygui as egui
 import pyperclip as pclip
-
-LINE_LENGTH_LIM = 50
-LINES_LIMIT = 200
+ 
+LINE_LENGTH_LIM = 300
+LINES_LIMIT = 1000
 TICK_LAG = 0.5
 OVERALL_IMPORT_LIM = 2*LINE_LENGTH_LIM*LINES_LIMIT
 END_OF_LINE_CHAR = """
 """ # BYOND can't parse \n and I am forced to define my own NEWLINE char
-
+ 
 OCTAVE_TRANSPOSE = 0 # Change here to transpose melodies by octaves
 FLOAT_PRECISION = 2 # Change here to allow more or less numbers after dot in floats
-
+ 
 OCTAVE_KEYS = 12
 HIGHEST_OCTAVE = 8
-
+ 
 time_quanta = 100 * TICK_LAG
 """
 class Meta():
@@ -34,7 +32,7 @@ class Meta():
     o_complexity = epsilon**2
     random_variance = 0.01
 """
-
+ 
 # UTILITY FUNCTIONS
 def condition(event):
     """
@@ -45,7 +43,7 @@ def condition(event):
     if event[0] == 'note': # Only thing that matters
         return True
     return False
-
+ 
 def notenum2string(num, accidentals, octaves):
     """
     This function converts given notenum to SS13 note according to previous
@@ -54,29 +52,29 @@ def notenum2string(num, accidentals, octaves):
     names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
     convert_table = {1:0, 3:1, 6:2, 8:3, 10:4}
     inclusion_table = {0:0, 2:1, 5:2, 7:3, 9:4}
-
+ 
     num += OCTAVE_KEYS * OCTAVE_TRANSPOSE
     octave = int(num / OCTAVE_KEYS)
     if octave < 1 or octave > HIGHEST_OCTAVE:
         return ["", accidentals, octaves]
-
+ 
     accidentals = accidentals.copy()
     octaves = octaves.copy()
-
+ 
     output_octaves = list(octaves)
     name_indx = num % OCTAVE_KEYS
-
+ 
     accidental = (len(names[name_indx]) == 2)
     output_octaves[name_indx] = octave
     add_n = False
-
+ 
     if accidental:
         accidentals[convert_table[name_indx]] = True
     else:
         if name_indx in inclusion_table:
             add_n = accidentals[inclusion_table[name_indx]]
             accidentals[inclusion_table[name_indx]] = False
-
+ 
     return [
         (
             names[name_indx]+
@@ -86,7 +84,7 @@ def notenum2string(num, accidentals, octaves):
         accidentals,
         output_octaves
         ]
-
+ 
 def dur2mod(dur, bpm_mod=1.0):
     """
     This functions returns float representation of duration ready to be
@@ -96,7 +94,7 @@ def dur2mod(dur, bpm_mod=1.0):
     mod = round(mod, FLOAT_PRECISION)
     return str(mod).rstrip('0').rstrip('.')
 # END OF UTILITY FUNCTIONS
-
+ 
 # CONVERSION FUNCTIONS
 def obtain_midi_file():
     """
@@ -109,7 +107,7 @@ def obtain_midi_file():
         return None
     file = open(file, mode='rb').read()
     return file
-
+ 
 def midi2score_without_ticks(midi_file):
     """
     Transforms aforementioned file into a score, truncates it and returns it
@@ -118,7 +116,7 @@ def midi2score_without_ticks(midi_file):
     opus = mi.to_millisecs(opus)
     score = mi.opus2score(opus)
     return score[1:] # Ticks don't matter anymore, it is always 1000
-
+ 
 def filter_events_from_score(score):
     """
     Filters out irrevelant events and returns new score
@@ -130,7 +128,7 @@ def filter_events_from_score(score):
             )),
         score
         ))
-
+ 
 def filter_empty_tracks(score):
     """
     Filters out empty tracks and returns new score
@@ -138,8 +136,8 @@ def filter_empty_tracks(score):
     return list(filter(
         lambda score_track: score_track,
         score))
-
-
+ 
+ 
 def filter_start_time_and_note_num(score):
     """
     Recreates score with only note numbers and start time of each note and returns new score
@@ -149,13 +147,13 @@ def filter_start_time_and_note_num(score):
             lambda event: [event[1], event[4]],
             score_track)),
         score))
-
+ 
 def merge_events(score):
     """Merges all tracks together and returns new score"""
     return list(reduce(
         lambda lst1, lst2: lst1+lst2,
         score))
-
+ 
 def sort_score_by_event_times(score):
     """Sorts events by start time and returns new score"""
     return list(map(
@@ -164,7 +162,7 @@ def sort_score_by_event_times(score):
             list(range(len(score))),
             key=lambda indx: score[indx][0])
         ))
-
+ 
 def convert_into_delta_times(score):
     """
     Transform start_time into delta_time and returns new score
@@ -177,7 +175,7 @@ def convert_into_delta_times(score):
             ]), # [ [1, 2], [3, 4] ] -> [ [2, 2] ]
         zip(score[:-1], score[1:]) # Shifted association. [1, 2, 3] -> [ (1, 2), (2, 3) ]
         ))+[[1000, score[-1][1]]] # Add 1 second note to the end
-
+ 
 def perform_roundation(score):
     """
     Rounds delta times to the nearest multiple of time quanta as BYOND can't
@@ -186,7 +184,7 @@ def perform_roundation(score):
     return list(map(
         lambda event: [time_quanta*round(event[0]/time_quanta), event[1]],
         score))
-
+ 
 def obtain_common_duration(score):
     """
     Returns the most frequent duration throughout the whole melody
@@ -203,7 +201,7 @@ def obtain_common_duration(score):
     dur_n_count = list(zip(durs, counter))
     dur_n_count = list(filter(lambda e: e[1] == highest_counter, dur_n_count))
     return dur_n_count[0][0] # Will be there
-
+ 
 def reduce_score_to_chords(score):
     """
     Reforms score into a chord-duration list:
@@ -221,13 +219,13 @@ def reduce_score_to_chords(score):
         new_score.append(new_chord) # Append chord to the list
         new_chord = [[], 0] # Reset the chord
     return new_score
-
+ 
 def obtain_sheet_music(score, most_frequent_dur):
     """
     Returns unformated sheet music from score
     """
     result = ""
-
+ 
     octaves = [3 for i in range(12)]
     accidentals = [False for i in range(7)]
     for event in score:
@@ -238,14 +236,14 @@ def obtain_sheet_music(score, most_frequent_dur):
             octaves = data[2]
             if note_indx != len(event[0])-1:
                 result += '-'
-
+ 
         if event[1] != most_frequent_dur: # Quarters are default
             result += '/'
             result += dur2mod(event[1], most_frequent_dur)
         result += ','
-
+ 
     return result
-
+ 
 def explode_sheet_music(sheet_music):
     """
     Splits unformatted sheet music into formated lines of LINE_LEN_LIM
@@ -266,9 +264,9 @@ def explode_sheet_music(sheet_music):
             line_counter += 1
         split_list.append(note)
         counter += len(note)
-
+ 
     return split_list
-
+ 
 def finalize_sheet_music(split_music, most_frequent_dur):
     """
     Recreates sheet music from exploded sheet music, truncates it and returns it
@@ -280,15 +278,26 @@ def finalize_sheet_music(split_music, most_frequent_dur):
     sheet_music = "BPM: " + str(int(60000 / most_frequent_dur)) + END_OF_LINE_CHAR + sheet_music
     return sheet_music[:min(len(sheet_music), OVERALL_IMPORT_LIM)]
 # END OF CONVERSION FUNCTIONS
-
+ 
 def main_cycle():
     """
     Activate the script
     """
-    while True:
-        midi_file = obtain_midi_file()
+    for filename in os.listdir("midis"):
+        root, extension = os.path.splitext(filename)
+        if not (extension == ".mid" or extension == ".midi"):
+            print(f"Non midi file \"{filename}\"")
+            continue
+        
+        data = None
+        with open(os.path.join("midis", filename), mode='rb') as f:
+            data = f.read()
+ 
+        midi_file = data
         if not midi_file:
             return # Cancel
+        
+        print(f"Processing midi file \"{filename}\"")
         score = midi2score_without_ticks(midi_file)
         score = filter_events_from_score(score)
         score = filter_start_time_and_note_num(score)
@@ -302,7 +311,8 @@ def main_cycle():
         sheet_music = obtain_sheet_music(score, most_frequent_dur)
         split_music = explode_sheet_music(sheet_music)
         sheet_music = finalize_sheet_music(split_music, most_frequent_dur)
-
-        pclip.copy(sheet_music)
-
+ 
+        with open(os.path.join("midis", root + ".txt"), "w") as o:
+            o.write(sheet_music)
+ 
 main_cycle()
